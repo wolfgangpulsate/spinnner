@@ -1,0 +1,11 @@
+#spinner-container {
+    min-height: 300px;
+    /* Ensures the card has a minimum height */
+}
+
+#message-area {
+    width: 100%;
+    font-style: italic;
+    color: #6c757d;
+    /* A muted text color */
+}
