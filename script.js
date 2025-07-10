@@ -245,6 +245,18 @@ const funFacts = [
     "Baking ice cream...",
 ];
 
+// Keep a short history (last 5) of the AI messages we have already shown
+const funHistory = [];
+const eduHistory = [];
+const HISTORY_LIMIT = 5;
+
+// Helper to push a new message into the correct history array
+function remember(commentType, message) {
+    const historyArr = commentType === 'fun' ? funHistory : eduHistory;
+    historyArr.push(message);
+    if (historyArr.length > HISTORY_LIMIT) historyArr.shift(); // drop oldest
+}
+
 // --- Configuration ---
 const WPM = 200; // Average reading speed in Words Per Minute
 const READING_SPEED_MULTIPLIER = 1.0; // Adjust this to make reading time longer or shorter
@@ -280,24 +292,27 @@ function calculateDisplayTime(message) {
  */
 async function getAIComment(userPrompt, commentType) {
     try {
+        const historyArr = commentType === 'fun' ? funHistory : eduHistory;
+
         const response = await fetch('/api/generate-comment', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ userPrompt, commentType }),
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                userPrompt,
+                commentType,
+                lastGenerations: historyArr    // Send history to API
+            }),
         });
 
         if (!response.ok) {
-            // If the response is not OK, throw an error with the status text
             throw new Error(`API call failed: ${response.statusText}`);
         }
 
         const data = await response.json();
+        remember(commentType, data.message);   // Store new message in history
         return data.message;
     } catch (error) {
         console.error(`Could not fetch ${commentType} comment:`, error);
-        // Return a fallback message so the spinner doesn't get stuck
         return `Couldn't generate a ${commentType} comment... Let's try something else!`;
     }
 }

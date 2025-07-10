@@ -9,6 +9,18 @@ const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
 });
 
+// Keep a short history (last 5) of the AI messages we have already shown
+const funHistory = [];
+const eduHistory = [];
+const HISTORY_LIMIT = 10;
+
+// Helper to push a new message into the correct history array
+function remember(commentType, message) {
+    const historyArr = commentType === 'fun' ? funHistory : eduHistory;
+    historyArr.push(message);
+    if (historyArr.length > HISTORY_LIMIT) historyArr.shift(); // drop oldest
+}
+
 // The main function that will be executed by Vercel
 module.exports = async (req, res) => {
     // We only want to handle POST requests
@@ -17,10 +29,11 @@ module.exports = async (req, res) => {
     }
 
     try {
-        const { userPrompt, commentType } = req.body;
+        const { userPrompt, commentType, lastGenerations = [] } = req.body;
         console.log(`\n--- New Request ---`);
         console.log(`Received request for comment type: "${commentType}"`);
         console.log(`User Prompt: "${userPrompt}"`);
+        console.log(`History:`, lastGenerations);
 
         if (!userPrompt || !commentType) {
             return res.status(400).json({ message: 'Missing userPrompt or commentType in request body' });
@@ -30,16 +43,22 @@ module.exports = async (req, res) => {
 
         // Define the two "base prompts" to control the AI's response
         if (commentType === 'fun') {
-            systemPrompt = `You are a witty, sarcastic assistant. A user is generating an image with the prompt: "${userPrompt}". Write a short, single-sentence, fun, and quirky comment about the creative process. For example, if the prompt is 'a cat in a hat', you could say 'Finding a cat that agreed to wear a hat...' or 'Negotiating modeling fees with the feline.'. Keep your text short`;
+            systemPrompt = `You are a witty, sarcastic assistant. A user is generating an image with the prompt: "${userPrompt}". Write a short, single-sentence, fun, and quirky comment about the creative process. For example, if the prompt is 'a cat in a hat', you could say 'Finding a cat that agreed to wear a hat...' or 'Negotiating modeling fees with the feline.'. Keep your text below 15 words.`;
         } else if (commentType === 'educational') {
-            systemPrompt = `You are an expert in AI image generation for marketing. A user is generating an image with the prompt: "${userPrompt}". Provide a one-sentence educational tip to help them write better prompts for marketing images in the future, inspired by their original prompt. For example, if the prompt mentions a 'person', you could say 'Did you know that specifying the exact number of people in your prompt leads to more consistent results?' Keep your explainers short`;
+            systemPrompt = `You are an expert in AI image generation for marketing. A user is generating an image with the prompt: "${userPrompt}". Provide a one-sentence educational tip to help them write better prompts for marketing images in the future, inspired by their original prompt. Keep your text below 15 words.`;
         } else {
             return res.status(400).json({ message: 'Invalid commentType' });
         }
 
-        console.log('--- Sending to OpenAI ---');
-        console.log(`System Prompt: ${systemPrompt}`);
-        console.log('-------------------------');
+        // Add history to avoid repetition
+        if (lastGenerations && lastGenerations.length > 0) {
+            const historyText = lastGenerations.join(' | ');
+            systemPrompt += ` Here are the last generations to help you avoid repetition: ${historyText}. Now generate a NEW comment.`;
+        }
+
+        console.log('--- Full Prompt Sent to OpenAI ---');
+        console.log(systemPrompt);
+        console.log('----------------------------------');
 
         // Call the OpenAI API
         const completion = await openai.chat.completions.create({
@@ -47,8 +66,8 @@ module.exports = async (req, res) => {
             messages: [
                 { role: "system", content: systemPrompt },
             ],
-            max_tokens: 10, // Limit the response length
-            temperature: 1.3, // Add some creativity
+            max_tokens: 60, // Limit the response length
+            temperature: 0.7, // Add some creativity
         });
 
         const AImessage = completion.choices[0].message.content;
