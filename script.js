@@ -1,23 +1,13 @@
 const funFacts = [
-    "Reticulating splines...",
     "Generating witty dialog...",
     "Swapping time and space...",
-    "Spinning violently around the y-axis...",
     "Tokenizing real life...",
     "Bending the spoon...",
     "Filtering morale...",
     "Don't think of purple hippos...",
-    "We need a new fuse...",
-    "Have a good day.",
-    "Upgrading Windows, your PC will restart several times. Sit back and relax.",
-    "640K ought to be enough for anybody",
-    "The architects are still drafting",
-    "The bits are breeding",
-    "We're building the buildings as fast as we can",
     "Would you prefer chicken, steak, or tofu?",
-    "(Pay no attention to the man behind the curtain)",
     "...and enjoy the elevator music...",
-    "Please wait while the little elves draw your map",
+    "Please wait while the little elves draw your image",
     "Don't worry - a few bits tried to escape, but we caught them",
     "Would you like fries with that?",
     "Checking the gravitational constant in your locale...",
@@ -255,16 +245,32 @@ const funFacts = [
     "Baking ice cream...",
 ];
 
+// --- Configuration ---
+const WPM = 200; // Average reading speed in Words Per Minute
+const READING_SPEED_MULTIPLIER = 1.0; // Adjust this to make reading time longer or shorter
+const MIN_DISPLAY_TIME_MS = 3000; // Minimum time a message is displayed, in milliseconds
+const MS_PER_WORD = (60 / WPM) * 1000;
+
 // --- DOM Elements ---
 const generateBtn = document.getElementById('generate-btn');
 const promptInput = document.getElementById('prompt-input');
 const spinnerContainer = document.getElementById('spinner-container');
 const messageArea = document.getElementById('message-area');
 
-let messageInterval; // To hold the interval ID
 let isGenerating = false; // To prevent multiple simultaneous runs
 
 // --- Functions ---
+
+/**
+ * Calculates how long to display a message based on its word count.
+ * @param {string} message The message to be displayed.
+ * @returns {number} The time in milliseconds.
+ */
+function calculateDisplayTime(message) {
+    const wordCount = message.split(/\s+/).length; // Count words
+    const time = wordCount * MS_PER_WORD * READING_SPEED_MULTIPLIER;
+    return Math.max(time, MIN_DISPLAY_TIME_MS);
+}
 
 /**
  * Fetches a comment from our serverless API function.
@@ -314,6 +320,7 @@ function showMessage(message) {
 
 /**
  * Starts the spinner and the message rotation sequence.
+ * This function now handles the new sequence: one hardcoded message, then an alternating AI loop.
  */
 async function startGenerationSequence() {
     if (isGenerating) return; // Don't start a new sequence if one is running
@@ -329,29 +336,58 @@ async function startGenerationSequence() {
     spinnerContainer.style.display = 'flex';
     messageArea.style.transition = 'opacity 0.3s ease-in-out';
 
-    // This is our sequence of messages to display
-    const messageSequence = [
-        () => funFacts[Math.floor(Math.random() * funFacts.length)], // 1. Hardcoded fun fact
-        () => getAIComment(userPrompt, 'fun'),                       // 2. AI-powered fun comment
-        () => funFacts[Math.floor(Math.random() * funFacts.length)], // 3. Hardcoded fun fact
-        () => getAIComment(userPrompt, 'educational'),               // 4. AI-powered educational comment
+    // --- Step 1: Show the initial hardcoded message to bridge latency ---
+    const initialMessage = funFacts[Math.floor(Math.random() * funFacts.length)];
+    showMessage(initialMessage);
+    const initialDisplayTime = calculateDisplayTime(initialMessage);
+    console.log(`Displaying for ${initialDisplayTime.toFixed(0)}ms: "${initialMessage}"`);
+
+    // --- Step 2: Set up the repeating AI sequence ---
+    const aiMessageSequence = [
+        () => getAIComment(userPrompt, 'fun'),
+        () => getAIComment(userPrompt, 'educational'),
     ];
-
-    let currentStep = 0;
-
-    // Function to process and display the next message in the sequence
-    const nextMessage = async () => {
-        const messageGenerator = messageSequence[currentStep % messageSequence.length];
-        const message = await messageGenerator();
-        showMessage(message);
-        currentStep++;
+    let aiStep = 0;
+    const getNextAIMessagePromise = () => {
+        const messageGenerator = aiMessageSequence[aiStep % aiMessageSequence.length];
+        aiStep++;
+        return messageGenerator();
     };
 
-    // Show the first message immediately
-    await nextMessage();
+    // --- Step 3: Wait for the initial message's display time to pass ---
+    // While waiting, we can start fetching the *first* AI message.
+    const firstAIMessagePromise = getNextAIMessagePromise();
+    await new Promise(resolve => setTimeout(resolve, initialDisplayTime));
 
-    // Continue with the rest of the messages on an interval
-    messageInterval = setInterval(nextMessage, 5000); // Display a new message every 5 seconds
+    // If generation was stopped during the initial wait, exit.
+    if (!isGenerating) return;
+
+    // --- Step 4: Run the main AI message loop ---
+    const runAILoop = async () => {
+        // The first AI message has been preloading. Now we wait for it to be ready.
+        let currentMessage = await firstAIMessagePromise;
+
+        while (isGenerating) {
+            // Preload the *next* AI message in the background.
+            const nextMessagePromise = getNextAIMessagePromise();
+
+            // Display the AI message we already have.
+            showMessage(currentMessage);
+            const displayTime = calculateDisplayTime(currentMessage);
+            console.log(`Displaying for ${displayTime.toFixed(0)}ms: "${currentMessage}"`);
+
+            // Wait for that calculated amount of time.
+            await new Promise(resolve => setTimeout(resolve, displayTime));
+
+            // If the user has stopped the generation while we were waiting, exit the loop.
+            if (!isGenerating) break;
+
+            // Now, wait for the next message (which has been preloading) to become the current one.
+            currentMessage = await nextMessagePromise;
+        }
+    };
+
+    runAILoop(); // Start the AI sequence loop
 }
 
 
@@ -359,11 +395,11 @@ async function startGenerationSequence() {
  * Hides the spinner and stops the message rotation.
  */
 function stopGenerationSequence() {
-    spinnerContainer.style.display = 'none';
-    clearInterval(messageInterval);
-    messageArea.textContent = '';
-    isGenerating = false;
+    isGenerating = false; // This will cause the async loop to terminate
     generateBtn.disabled = false;
+    spinnerContainer.style.display = 'none';
+    messageArea.textContent = '';
+    messageArea.style.opacity = 1; // Reset opacity for the next run
 }
 
 // --- Event Listeners ---
