@@ -45,7 +45,7 @@ module.exports = async (req, res) => {
         if (commentType === 'fun') {
             systemPrompt = `You are a witty, sarcastic assistant. A user is generating an image with the prompt: "${userPrompt}". Write a short, single-sentence, fun, and quirky comment about the creative process. For example, if the prompt is 'a cat in a hat', you could say 'Finding a cat that agreed to wear a hat...' or 'Negotiating modeling fees with the feline.'. Keep your text below 15 words.`;
         } else if (commentType === 'educational') {
-            systemPrompt = `You are an expert in AI image generation for marketing. A user is generating an image with the prompt: "${userPrompt}". Provide a one-sentence educational tip to help them write better prompts for marketing images in the future, inspired by their original prompt. Keep your text below 15 words.`;
+            systemPrompt = `You are an expert in AI image generation for marketing. A user is generating an image with the prompt: "${userPrompt}". Provide a one-sentence educational tip to help them write better prompts for marketing images in the future, inspired by their original prompt. Keep your text below 15 words but include the word prompt.`;
         } else {
             return res.status(400).json({ message: 'Invalid commentType' });
         }
